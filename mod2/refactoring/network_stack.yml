@@ -1,0 +1,182 @@
+# ------------------------------------------------------------#
+# 入力させる値 Input Parameters
+# ------------------------------------------------------------#
+Parameters:
+  ProjectName:
+    Type: String
+  VPCCIDR:
+    Type: String
+    Default: "10.0.0.0/16"
+  PublicSubnetCIDR:
+    Type: String
+    Default: "10.0.0.0/24"
+  PrivateSubnetCIDR:
+    Type: String
+    Default: "10.0.1.0/24"
+
+Resources:
+# ------------------------------------------------------------#
+#  作成するVPC
+# ------------------------------------------------------------#
+# VPC Create
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-vpc"
+
+# ------------------------------------------------------------#
+#  Internet Gateway 作成
+# ------------------------------------------------------------#
+# IGW Create
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-igw"
+
+  AttachCfInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId : !Ref InternetGateway
+      VpcId: !Ref VPC
+
+
+# ------------------------------------------------------------#
+#  サブネット作成
+# ------------------------------------------------------------#
+# Public Subnet Create
+  PublicSubnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: "ap-northeast-1a"
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Ref PublicSubnetCIDR
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-subnet"
+# Private Subnet Create
+  PrivateSubnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: "ap-northeast-1a"
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Ref PrivateSubnetCIDR
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-private-subnet"
+
+# ------------------------------------------------------------#
+# * パブリックサブネットのルートテーブル設定
+# ------------------------------------------------------------#
+
+  RouteTableForPublicSubnet:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-rtb"
+
+  RouteForPublicSubnet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableForPublicSubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  AssocciateRouteTableForPublicSubnet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTableForPublicSubnet
+      SubnetId: !Ref PublicSubnet
+
+# ------------------------------------------------------------#
+# * プライベートサブネットのルートテーブル設定,NATゲートウェイ作成
+# ------------------------------------------------------------#
+
+  RouteTableForPrivateSubnet:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-private-rtb"
+
+  RouteForPrivateSubnet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableForPrivateSubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  AssocciateRouteTableForPrivateSubnet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTableForPrivateSubnet
+      SubnetId: !Ref PrivateSubnet
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NatGatewayEIP
+          - AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-nat-gateway"
+
+# ------------------------------------------------------------#
+# Output Parameters * 別スタックからの参照用途
+# ------------------------------------------------------------#
+Outputs:
+# Project Name
+  ProjectName:
+    Value: !Ref ProjectName
+    Export:
+      Name: "ProjectName"
+
+# VPC
+  VPC:
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${ProjectName}-vpc"
+
+  VPCCIDR:
+    Value: !Ref VPCCIDR
+    Export:
+      Name: !Sub "${ProjectName}-vpc-cidr"
+
+# Subnet
+  PublicSubnet:
+    Value: !Ref PublicSubnet
+    Export:
+      Name: !Sub "${ProjectName}-public-subnet"
+
+  PublicSubnetCIDR:
+    Value: !Ref PublicSubnetCIDR
+    Export:
+      Name: !Sub "${ProjectName}-public-subnet-a-cidr"
+
+  PrivateSubnet:
+    Value: !Ref PrivateSubnet
+    Export:
+      Name: !Sub "${ProjectName}-private-subnet"
+
+  PrivateSubnetCIDR:
+    Value: !Ref PrivateSubnetCIDR
+    Export:
+      Name: !Sub "${ProjectName}-private-subnet-cidr"
+
