@@ -1,0 +1,357 @@
+# ------------------------------------------------------------#
+# 入力させる値 Input Parameters
+# ------------------------------------------------------------#
+Parameters:
+  ProjectName:
+    Type: String
+  VPCCIDR:
+    Type: String
+    Default: "10.0.0.0/16"
+  PublicSubnetCIDR:
+    Type: String
+    Default: "10.0.0.0/24"
+  PrivateSubnetCIDR:
+    Type: String
+    Default: "10.0.1.0/24"
+
+  Ec2KeyPair:
+    Type: String
+    Default: shotag-tokyo-key.pem
+    AllowedValues:
+      - shotag-tokyo-key.pem
+    Description: "Enter EC2 Key Pair Name"
+
+# AMI ID の SSM パラメータストアからの取得
+  AmazonLinuxAMIID:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+# ------------------------------------------------------------#
+#  作成するVPC
+# ------------------------------------------------------------#
+# VPC Create
+  VPC:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: !Ref VPCCIDR
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-vpc"
+
+# ------------------------------------------------------------#
+#  Internet Gateway 作成
+# ------------------------------------------------------------#
+# IGW Create
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-igw"
+
+  AttachCfInternetGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId : !Ref InternetGateway
+      VpcId: !Ref VPC
+
+
+# ------------------------------------------------------------#
+#  サブネット作成
+# ------------------------------------------------------------#
+# Public Subnet Create
+  PublicSubnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: "ap-northeast-1a"
+      MapPublicIpOnLaunch: true
+      CidrBlock: !Ref PublicSubnetCIDR
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-subnet"
+# Private Subnet Create
+  PrivateSubnet:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      AvailabilityZone: "ap-northeast-1a"
+      MapPublicIpOnLaunch: false
+      CidrBlock: !Ref PrivateSubnetCIDR
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-private-subnet"
+
+# ------------------------------------------------------------#
+# * パブリックサブネットのルートテーブル設定
+# ------------------------------------------------------------#
+
+  RouteTableForPublicSubnet:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-public-rtb"
+
+  RouteForPublicSubnet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableForPublicSubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  AssocciateRouteTableForPublicSubnet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTableForPublicSubnet
+      SubnetId: !Ref PublicSubnet
+
+# ------------------------------------------------------------#
+# * プライベートサブネットのルートテーブル設定,NATゲートウェイ作成
+# ------------------------------------------------------------#
+
+  RouteTableForPrivateSubnet:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-private-rtb"
+
+  RouteForPrivateSubnet:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTableForPrivateSubnet
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  AssocciateRouteTableForPrivateSubnet:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTableForPrivateSubnet
+      SubnetId: !Ref PrivateSubnet
+
+  NatGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - NatGatewayEIP
+          - AllocationId
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-nat-gateway"
+
+# ------------------------------------------------------------#
+# セキュリティグループ
+# ------------------------------------------------------------#
+
+  MyDefaultSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "my default sg, created by Cfn"
+          GroupName: "MyDefaultSecurityGroup"
+          VpcId: !Ref VPC
+          Tags:
+              - Key: "Name"
+                Value: "MyDefaultSecurityGroup"
+          SecurityGroupIngress:
+              - IpProtocol: "-1"
+                FromPort: "-1"
+                ToPort: "-1"
+                CidrIp: 10.0.0.0/16
+
+  MyWebSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "web allowed sg, created by Cfn"
+          GroupName: "MyWebSecurityGroup"
+          VpcId: !Ref VPC
+          Tags:
+              - Key: "Name"
+                Value: "MyWebSecurityGroup"
+          SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+
+              - IpProtocol: tcp
+                FromPort: 443
+                ToPort: 443
+                CidrIp: 0.0.0.0/0
+
+
+  MyDBSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "mysql allowed sg, created by Cfn"
+          GroupName: "MyDBSecurityGroup"
+          VpcId: !Ref VPC
+          Tags:
+              - Key: "Name"
+                Value: "MyDBSecurityGroup"
+          SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 3306
+                ToPort: 3306
+                CidrIp: !Ref VPCCIDR
+
+# ------------------------------------------------------------#
+# Create Test Instance
+# ------------------------------------------------------------#
+
+  MyInstance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmazonLinuxAMIID
+      InstanceType: 't2.micro'
+      KeyName: !Ref Ec2KeyPair
+      IamInstanceProfile : !Ref MyEC2InstanceProfile
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !Ref PublicSubnet
+          GroupSet:
+            - !Ref MyDefaultSecurityGroup
+      UserData: !Base64 |
+        #!/bin/bash -ex
+        sudo yum update -y
+        sudo yum install -y httpd php
+        sudo service httpd start
+        sudo systemctl enable httpd.service
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-MyInstanceA"
+
+# ------------------------------------------------------------#
+# EC2で使用するIAMロール
+# ------------------------------------------------------------#
+
+  MyEC2Role:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "${ProjectName}-my-ec2-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  MyEC2RolePolicies:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Sub "${ProjectName}-my-ec2-role-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: "*"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "ssmmessages:CreateControlChannel"
+              - "ssmmessages:CreateDataChannel"
+              - "ssmmessages:OpenControlChannel"
+              - "ssmmessages:OpenDataChannel"
+              - "ssm:UpdateInstanceInformation"
+            Resource: '*'
+          - Effect: "Allow"
+            Action:
+              - "s3:PutObject"
+              - "s3:GetEncryptionConfiguration"
+              - "s3:PutObjectTagging"
+            Resource:
+              - "arn:aws:s3:::ssm-sysops/*"
+              - "arn:aws:s3:::ssm-sysops"
+          - Effect: "Allow"
+            Action:
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+              - "logs:DescribeLogGroups"
+              - "logs:DescribeLogStreams"
+              - "logs:PutLogEvents"
+            Resource: '*'
+      Roles:
+        - !Ref MyEC2Role
+
+  MyEC2InstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        - Ref: "MyEC2Role"
+
+# ------------------------------------------------------------#
+# Output Parameters * 別スタックからの参照用途
+# ------------------------------------------------------------#
+Outputs:
+# VPC
+  VPC:
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${ProjectName}-vpc"
+
+  VPCCIDR:
+    Value: !Ref VPCCIDR
+    Export:
+      Name: !Sub "${ProjectName}-vpc-cidr"
+
+# Subnet
+  PublicSubnet:
+    Value: !Ref PublicSubnet
+    Export:
+      Name: !Sub "${ProjectName}-public-subnet"
+
+  PublicSubnetCIDR:
+    Value: !Ref PublicSubnetCIDR
+    Export:
+      Name: !Sub "${ProjectName}-public-subnet-a-cidr"
+
+  PrivateSubnet:
+    Value: !Ref PrivateSubnet
+    Export:
+      Name: !Sub "${ProjectName}-private-subnet"
+
+  PrivateSubnetCIDR:
+    Value: !Ref PrivateSubnetCIDR
+    Export:
+      Name: !Sub "${ProjectName}-private-subnet-cidr"
+
+# Security Group
+  MyDefaultSecurityGroup:
+    Value: !Ref MyDefaultSecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-my-default-security-group"
+
+  MyWebSecurityGroup:
+    Value: !Ref MyWebSecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-my-web-security-group"
+
+  MyDBSecurityGroup:
+    Value: !Ref MyDBSecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-my-db-security-group"
+  
+# IAM
+  MyEC2InstanceProfile:
+    Value: !Ref MyEC2InstanceProfile
+    Export:
+      Name: !Sub "${ProjectName}-my-ec2-instance-profile"
