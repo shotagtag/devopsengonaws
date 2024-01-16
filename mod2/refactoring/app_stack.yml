@@ -1,0 +1,61 @@
+# ------------------------------------------------------------#
+# 入力させる値 Input Parameters
+# ------------------------------------------------------------#
+Parameters:
+  ProjectName:
+    Type: String
+  Ec2KeyPair:
+    Type: String
+    Default: shotag-tokyo-key.pem
+    AllowedValues:
+      - shotag-tokyo-key.pem
+    Description: "Enter EC2 Key Pair Name"
+
+# AMI ID の SSM パラメータストアからの取得
+  AmazonLinuxAMIID:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+Resources:
+# ------------------------------------------------------------#
+# Create Test Instance
+# ------------------------------------------------------------#
+  MyEC2Instance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmazonLinuxAMIID
+      InstanceType: 't2.micro'
+      KeyName: !Ref Ec2KeyPair
+      IamInstanceProfile : !ImportValue
+        'Fn::Sub': "${ProjectName}-my-ec2-instance-profile"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeviceIndex: "0"
+          SubnetId: !ImportValue
+            'Fn::Sub': "${ProjectName}-public-subnet"
+          GroupSet:
+            - !ImportValue 
+              'Fn::Sub': "${ProjectName}-my-default-security-group"
+      UserData: !Base64 |
+        #!/bin/bash -ex
+        sudo yum update -y
+        sudo yum install -y httpd php
+        sudo service httpd start
+        sudo systemctl enable httpd.service
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-MyInstanceB"
+        - Key: purpose
+          Value: "dev"
+        - Key: service_name
+          Value: "taguchi-shopping"
+
+# ------------------------------------------------------------#
+# Output Parameters * 別スタックからの参照用途
+# ------------------------------------------------------------#
+Outputs:
+# EC2 Instance
+  MyEC2Instance1:
+    Value: !Ref MyEC2Instance1
+    Export:
+      Name: !Sub "${ProjectName}-my-ec2-instance01"
