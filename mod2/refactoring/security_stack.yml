@@ -1,0 +1,155 @@
+# ------------------------------------------------------------#
+# 入力させる値 Input Parameters
+# ------------------------------------------------------------#
+Parameters:
+  ProjectName:
+    Type: String
+
+Resources:
+# ------------------------------------------------------------#
+# セキュリティグループ
+# ------------------------------------------------------------#
+  MyDefaultSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "my default sg, created by Cfn"
+          GroupName: "MyDefaultSecurityGroup"
+          VpcId: !ImportValue
+            'Fn::Sub': "${ProjectName}-vpc"
+          Tags:
+              - Key: "Name"
+                Value: "MyDefaultSecurityGroup"
+          SecurityGroupIngress:
+              - IpProtocol: "-1"
+                FromPort: "-1"
+                ToPort: "-1"
+                CidrIp: 10.0.0.0/16
+
+  MyWebSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "web allowed sg, created by Cfn"
+          GroupName: "MyWebSecurityGroup"
+          VpcId: !ImportValue
+            'Fn::Sub': "${ProjectName}-vpc"
+          Tags:
+              - Key: "Name"
+                Value: "MyWebSecurityGroup"
+          SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 80
+                ToPort: 80
+                CidrIp: 0.0.0.0/0
+              - IpProtocol: tcp
+                FromPort: 443
+                ToPort: 443
+                CidrIp: 0.0.0.0/0
+
+  MyDBSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+          GroupDescription: "mysql allowed sg, created by Cfn"
+          GroupName: "MyDBSecurityGroup"
+          VpcId: !ImportValue
+            'Fn::Sub': "${ProjectName}-vpc"
+          Tags:
+              - Key: "Name"
+                Value: "MyDBSecurityGroup"
+          SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 3306
+                ToPort: 3306
+                CidrIp: !ImportValue
+                  'Fn::Sub': "${ProjectName}-vpc-cidr"
+
+# ------------------------------------------------------------#
+# EC2で使用するIAMロール
+# ------------------------------------------------------------#
+
+  MyEC2Role:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "${ProjectName}-my-ec2-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  MyEC2RolePolicies:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Sub "${ProjectName}-my-ec2-role-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Action: "*"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "ssmmessages:CreateControlChannel"
+              - "ssmmessages:CreateDataChannel"
+              - "ssmmessages:OpenControlChannel"
+              - "ssmmessages:OpenDataChannel"
+              - "ssm:UpdateInstanceInformation"
+            Resource: '*'
+          - Effect: "Allow"
+            Action:
+              - "s3:PutObject"
+              - "s3:GetEncryptionConfiguration"
+              - "s3:PutObjectTagging"
+            Resource:
+              - "arn:aws:s3:::ssm-sysops/*"
+              - "arn:aws:s3:::ssm-sysops"
+          - Effect: "Allow"
+            Action:
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+              - "logs:DescribeLogGroups"
+              - "logs:DescribeLogStreams"
+              - "logs:PutLogEvents"
+            Resource: '*'
+      Roles:
+        - !Ref MyEC2Role
+
+  MyEC2InstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        - Ref: "MyEC2Role"
+
+# ------------------------------------------------------------#
+# Output Parameters * 別スタックからの参照用途
+# ------------------------------------------------------------#
+Outputs:
+# Security Group
+  MyDefaultSecurityGroup:
+    Value: !Ref MyDefaultSecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-my-default-security-group"
+
+  MyWebSecurityGroup:
+    Value: !Ref MyWebSecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-my-web-security-group"
+
+  MyDBSecurityGroup:
+    Value: !Ref MyDBSecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-my-db-security-group"
+
+# IAM
+  MyEC2InstanceProfile:
+    Value: !Ref MyEC2InstanceProfile
+    Export:
+      Name: !Sub "${ProjectName}-my-ec2-instance-profile"
