@@ -1,0 +1,43 @@
+Parameters: 
+  MyBucketName:
+    Description: "input bucket's name."
+    Type: String
+  MyDDBName:
+    Description: "input database's name." 
+    Type: String
+Resources: 
+  MyS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref MyBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  MyDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref MyDDBName
+      AttributeDefinitions:
+        - AttributeName: "SongTitle"
+          AttributeType: "S"
+        - AttributeName: "Singer"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "SongTitle"
+          KeyType: "HASH"
+        - AttributeName: "Singer"
+          KeyType: "RANGE"
+      ProvisionedThroughput:
+        ReadCapacityUnits: "2"
+        WriteCapacityUnits: "2"
+Outputs:
+  MyS3BucketId:
+    Value: !Ref MyS3Bucket
+    Export:
+      Name: MyS3BucketId
+  MyDDBTableId:
+    Value: !Ref MyDDBTable
+    Export:
+      Name: MyDDBTableId
