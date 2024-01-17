@@ -1,0 +1,14 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Enable IAM Access Analyzer across accounts using StackSets
+
+Resources:
+  AccessAnalyzer:
+    Type: AWS::AccessAnalyzer::Analyzer
+    Properties:
+      AnalyzerName: 'MyAccessAnalyzer'
+      Type: 'ACCOUNT'
+
+Outputs:
+  AnalyzerARN:
+    Description: The ARN of the IAM Access Analyzer
+    Value: !GetAtt AccessAnalyzer.Arn
