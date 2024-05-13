@@ -1,9 +1,9 @@
 Parameters: 
   MyBucketName:
-    Description: "input bucket's name."
+    Description: "input s3 bucket name."
     Type: String
   MyDDBName:
-    Description: "input database's name." 
+    Description: "input dynamodb table name." 
     Type: String
 Resources: 
   MyS3Bucket:
@@ -30,8 +30,8 @@ Resources:
         - AttributeName: "Singer"
           KeyType: "RANGE"
       ProvisionedThroughput:
-        ReadCapacityUnits: "2"
-        WriteCapacityUnits: "2"
+        ReadCapacityUnits: "1"
+        WriteCapacityUnits: "1"
 Outputs:
   MyS3BucketId:
     Value: !Ref MyS3Bucket
