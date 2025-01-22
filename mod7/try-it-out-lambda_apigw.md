@@ -1,5 +1,7 @@
 # シンプルなAPIを作成してみましょう🚀
 
+![image](https://github.com/user-attachments/assets/6c332f65-599e-4003-a02b-97a10362af61)
+
 ### 1.シンプルなLambda関数を作成しましょう。指示されていない設定箇所はデフォルトでOKです。
 
 1. Lambda サービスに移動し、`関数を作成` をクリックします。
