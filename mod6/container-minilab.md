@@ -2,16 +2,6 @@
 
 VS Code Server にログインし、ターミナルで以下のコマンドを順に実行します。
 
-- ラボ権限の関係で root ユーザに昇格します。
-```
-sudo su -
-```
-
-- 必要なソフトウェアをインストールします。
-```
-yum -y install docker git
-```
-
 - web2048 を git クローンします。
 ```
 git clone https://github.com/gabrielecirulli/2048
